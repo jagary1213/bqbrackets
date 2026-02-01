@@ -64,85 +64,86 @@ with st.sidebar:
         f"• {teams_with_bye_per_round} teams with bye per round"
     )
     
-    st.sidebar.header("Advanced")
-    time_limit = st.slider(
-        "Solver Time Limit (seconds)",
-        min_value=1,
-        max_value=120,
-        value=10
-    )
-    max_attempts = st.sidebar.slider(
-        "Max attempts (1 = no retry)",
-        min_value=1,
-        max_value=50,
-        value=10,
-        help="Number of scheduling attempts. Set to 1 for single attempt. Higher values run multiple times with shuffled match orders to find the best schedule."
-    )
-    score_threshold = st.sidebar.slider(
-        "Acceptable score (lower is better)",
-        min_value=0.0,
-        max_value=100.0,
-        value=50.0,
-        help="The scheduler will stop retrying once it achieves a score below this threshold. Lower value means better overall balance. Typical excellent: 20-40. Good: 40-60."
-    )
-    
-    st.sidebar.markdown("**Scoring weights** (higher = more important)")
-    pair_slack_weight = st.sidebar.slider(
-        "Pair encounter balance (prevent extremes)",
-        min_value=0.0,
-        max_value=50.0,
-        value=20.0,
-        help="Prevents any pair of teams from playing drastically more/less than others. Focuses on eliminating the worst imbalances. Example: if pairs typically play 2 times, this prevents one pair from playing 5 times while another plays 1 time."
-    )
-    pair_var_weight = st.sidebar.slider(
-        "Pair consistency (smooth distribution)",
-        min_value=0.0,
-        max_value=50.0,
-        value=5.0,
-        help="Makes all pair encounter frequencies similar to the average. Works together with balance to ensure ALL pairs play roughly the same number of times, not just prevent extremes."
-    )
-    ref_slack_weight = st.sidebar.slider(
-        "Referee balance (prevent extremes)",
-        min_value=0.0,
-        max_value=50.0,
-        value=10.0,
-        help="Prevents any team from seeing one referee drastically more than others. Focuses on eliminating the worst referee assignment imbalances."
-    )
-    ref_var_weight = st.sidebar.slider(
-        "Referee consistency (smooth distribution)",
-        min_value=0.0,
-        max_value=50.0,
-        value=5.0,
-        help="Ensures each team sees each referee a similar number of times. Works together with balance to ensure smooth referee distribution across all teams."
-    )
-    team_match_weight = st.sidebar.slider(
-        "Team match fairness (equal participation)",
-        min_value=0.0,
-        max_value=500.0,
-        value=300.0,
-        help="CRITICAL: Ensures all teams play roughly the same number of matches. This is the most important factor for tournament fairness. Higher = stricter enforcement that every team gets similar opportunities to compete."
-    )
-    rematch_delay_weight = st.sidebar.slider(
-        "Rematch spacing (spread rematches apart)",
-        min_value=0.0,
-        max_value=10.0,
-        value=1.0,
-        help="When pairs meet multiple times, this spreads rematches across the tournament. Low weight: minimal spacing (e.g., rounds 1 & 2). High weight: maximize gaps (e.g., rounds 1 & 8). Weighted fairly low as it's less critical than other factors."
-    )
-    bye_balance_weight = st.sidebar.slider(
-        "Bye fairness (equal rest opportunities)",
-        min_value=0.0,
-        max_value=50.0,
-        value=10.0,
-        help="Ensures all teams get roughly the same number of bye rounds (rounds where they don't play). Important when not all teams can play each round. Example: 14 teams with 12 playing per round means 2 byes/round."
-    )
-    bye_spread_weight = st.sidebar.slider(
-        "Bye distribution (spread byes apart)",
-        min_value=0.0,
-        max_value=20.0,
-        value=3.0,
-        help="Prevents teams from having clustered bye rounds. Better: byes in rounds 1, 4, 7. Worse: byes in rounds 1, 2, 3. Ensures rest opportunities are spread across the tournament."
-    )
+    with st.sidebar.expander("⚙️ Advanced Settings", expanded=False):
+        st.markdown("**Solver Configuration**")
+        time_limit = st.slider(
+            "Solver Time Limit (seconds)",
+            min_value=1,
+            max_value=120,
+            value=10
+        )
+        max_attempts = st.slider(
+            "Max attempts (1 = no retry)",
+            min_value=1,
+            max_value=50,
+            value=10,
+            help="Number of scheduling attempts. Set to 1 for single attempt. Higher values run multiple times with shuffled match orders to find the best schedule."
+        )
+        score_threshold = st.slider(
+            "Acceptable score (lower is better)",
+            min_value=0.0,
+            max_value=100.0,
+            value=50.0,
+            help="The scheduler will stop retrying once it achieves a score below this threshold. Lower value means better overall balance. Typical excellent: 20-40. Good: 40-60."
+        )
+        
+        st.markdown("**Scoring weights** (higher = more important)")
+        pair_slack_weight = st.slider(
+            "Pair encounter balance (prevent extremes)",
+            min_value=0.0,
+            max_value=50.0,
+            value=20.0,
+            help="Prevents any pair of teams from playing drastically more/less than others. Focuses on eliminating the worst imbalances. Example: if pairs typically play 2 times, this prevents one pair from playing 5 times while another plays 1 time."
+        )
+        pair_var_weight = st.slider(
+            "Pair consistency (smooth distribution)",
+            min_value=0.0,
+            max_value=50.0,
+            value=5.0,
+            help="Makes all pair encounter frequencies similar to the average. Works together with balance to ensure ALL pairs play roughly the same number of times, not just prevent extremes."
+        )
+        ref_slack_weight = st.slider(
+            "Referee balance (prevent extremes)",
+            min_value=0.0,
+            max_value=50.0,
+            value=10.0,
+            help="Prevents any team from seeing one referee drastically more than others. Focuses on eliminating the worst referee assignment imbalances."
+        )
+        ref_var_weight = st.slider(
+            "Referee consistency (smooth distribution)",
+            min_value=0.0,
+            max_value=50.0,
+            value=5.0,
+            help="Ensures each team sees each referee a similar number of times. Works together with balance to ensure smooth referee distribution across all teams."
+        )
+        team_match_weight = st.slider(
+            "Team match fairness (equal participation)",
+            min_value=0.0,
+            max_value=500.0,
+            value=300.0,
+            help="CRITICAL: Ensures all teams play roughly the same number of matches. This is the most important factor for tournament fairness. Higher = stricter enforcement that every team gets similar opportunities to compete."
+        )
+        rematch_delay_weight = st.slider(
+            "Rematch spacing (spread rematches apart)",
+            min_value=0.0,
+            max_value=10.0,
+            value=1.0,
+            help="When pairs meet multiple times, this spreads rematches across the tournament. Low weight: minimal spacing (e.g., rounds 1 & 2). High weight: maximize gaps (e.g., rounds 1 & 8). Weighted fairly low as it's less critical than other factors."
+        )
+        bye_balance_weight = st.slider(
+            "Bye fairness (equal rest opportunities)",
+            min_value=0.0,
+            max_value=50.0,
+            value=10.0,
+            help="Ensures all teams get roughly the same number of bye rounds (rounds where they don't play). Important when not all teams can play each round. Example: 14 teams with 12 playing per round means 2 byes/round."
+        )
+        bye_spread_weight = st.slider(
+            "Bye distribution (spread byes apart)",
+            min_value=0.0,
+            max_value=20.0,
+            value=3.0,
+            help="Prevents teams from having clustered bye rounds. Better: byes in rounds 1, 4, 7. Worse: byes in rounds 1, 2, 3. Ensures rest opportunities are spread across the tournament."
+        )
 
 # Parse inputs
 try:
@@ -410,22 +411,32 @@ try:
                 else:
                     df_attempts['best'] = False
                 
-                # Rename columns for better display
-                df_attempts_display = df_attempts.rename(columns={
-                    'attempt': 'Attempt',
-                    'status': 'Status',
-                    'score': 'Score',
-                    'pair_slack': 'Pair Balance',
-                    'pair_var': 'Pair Consistency',
-                    'ref_slack': 'Ref Balance',
-                    'ref_var': 'Ref Consistency',
-                    'team_match_slack': 'Team Match',
-                    'rematch_delay': 'Rematch Gap',
-                    'bye_balance': 'Bye Balance',
-                    'bye_spread': 'Bye Spread',
-                    'best': 'Best'
-                })
-                attempts_container.table(df_attempts_display)
+                # Display best score prominently (mobile-friendly)
+                if not df_attempts.empty and df_attempts['score'].notna().any():
+                    current_best = df_attempts['score'].dropna().min()
+                    attempts_container.metric(
+                        label=f"Attempt {attempts}/{total_attempts}",
+                        value=f"Best Score: {current_best:.1f}",
+                        delta=None
+                    )
+                
+                # Show detailed table in expander (mobile-friendly)
+                with attempts_container.expander("📊 View All Attempts", expanded=False):
+                    df_attempts_display = df_attempts.rename(columns={
+                        'attempt': '#',
+                        'status': 'Status',
+                        'score': 'Score',
+                        'pair_slack': 'Pair',
+                        'pair_var': 'P.Var',
+                        'ref_slack': 'Ref',
+                        'ref_var': 'R.Var',
+                        'team_match_slack': 'Team',
+                        'rematch_delay': 'Rmtch',
+                        'bye_balance': 'Bye',
+                        'bye_spread': 'B.Spr',
+                        'best': '⭐'
+                    })
+                    st.dataframe(df_attempts_display, use_container_width=True, hide_index=True)
 
                 if best_score <= score_threshold:
                     break
