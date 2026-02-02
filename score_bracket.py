@@ -54,13 +54,34 @@ def build_ref_matrix(team_list, ref_counts):
 
 
 def score(df, pair_counts, ref_counts, team_match_counts, pair_weight, pair_var_weight, ref_slack_weight, ref_var_weight, team_match_weight, rematch_delay_weight, bye_balance_weight, bye_spread_weight, num_teams=None, num_rounds=None, num_refs=None, teams_per_match=None):
-    vals = list(pair_counts.values()) if pair_counts else [0]
-    pair_slack = max(vals) - min(vals) if vals else 0
-    pair_var = statistics.pvariance(vals) if len(vals) > 1 else 0.0
+    # Include ALL possible pairs (even 0-count) for accurate slack calculation
+    teams = sorted(team_match_counts.keys())
+    all_pair_counts = []
+    for t1, t2 in itertools.combinations(teams, 2):
+        key = (t1, t2) if t1 < t2 else (t2, t1)
+        all_pair_counts.append(pair_counts.get(key, 0))
+    
+    if all_pair_counts:
+        pair_slack = max(all_pair_counts) - min(all_pair_counts)
+        pair_var = statistics.pvariance(all_pair_counts)
+    else:
+        pair_slack = 0
+        pair_var = 0.0
 
-    ref_vals = list(ref_counts.values()) if ref_counts else [0]
-    ref_slack = max(ref_vals) - min(ref_vals) if ref_vals else 0
-    ref_var = statistics.pvariance(ref_vals) if len(ref_vals) > 1 else 0.0
+    # Include ALL possible (team, ref) combinations for accurate slack calculation
+    teams = sorted(team_match_counts.keys())
+    refs = sorted(set(r for (_, r) in ref_counts.keys()))
+    all_ref_counts = []
+    for team in teams:
+        for ref in refs:
+            all_ref_counts.append(ref_counts.get((team, ref), 0))
+    
+    if all_ref_counts:
+        ref_slack = max(all_ref_counts) - min(all_ref_counts)
+        ref_var = statistics.pvariance(all_ref_counts)
+    else:
+        ref_slack = 0
+        ref_var = 0.0
 
     team_match_vals = list(team_match_counts.values()) if team_match_counts else [0]
     team_match_slack = max(team_match_vals) - min(team_match_vals) if team_match_vals else 0

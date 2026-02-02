@@ -74,16 +74,32 @@ def main():
                 key = (t1, t2) if t1 < t2 else (t2, t1)
                 pair_counts[key] = pair_counts.get(key, 0) + 1
     
-    pair_vals = list(pair_counts.values()) if pair_counts else [0]
+    # Include ALL possible pairs (even 0-count) for accurate slack calculation
+    teams_list = [t.name for t in dm.teams]
+    all_pair_counts = []
+    for t1, t2 in itertools.combinations(sorted(teams_list), 2):
+        key = (t1, t2) if t1 < t2 else (t2, t1)
+        all_pair_counts.append(pair_counts.get(key, 0))
+    
+    pair_vals = all_pair_counts if all_pair_counts else [0]
     pair_slack = max(pair_vals) - min(pair_vals)
     pair_mean = sum(pair_vals) / len(pair_vals) if pair_vals else 0
     pair_var = sum((x - pair_mean) ** 2 for x in pair_vals) / len(pair_vals) if pair_vals else 0.0
     
     # 2. Referee balance
-    ref_vals = list(counts.values()) if counts else [0]
-    ref_slack = max(ref_vals) - min(ref_vals)
-    ref_mean = sum(ref_vals) / len(ref_vals) if ref_vals else 0
-    ref_var = sum((x - ref_mean) ** 2 for x in ref_vals) / len(ref_vals) if ref_vals else 0.0
+    teams_list = [t.name for t in dm.teams]
+    refs_list = [r.name for r in dm.referees]
+    all_ref_counts = []
+    for team in teams_list:
+        for ref in refs_list:
+            all_ref_counts.append(counts.get((team, ref), 0))
+    
+    if all_ref_counts:
+        ref_slack = max(all_ref_counts) - min(all_ref_counts)
+        ref_mean = sum(all_ref_counts) / len(all_ref_counts)
+        ref_var = sum((x - ref_mean) ** 2 for x in all_ref_counts) / len(all_ref_counts)
+    else:
+        ref_slack, ref_var = 0, 0.0
     
     # 3. Team match fairness
     team_match_counts = {t.name: 0 for t in dm.teams}
@@ -150,7 +166,7 @@ def main():
     # Intelligent penalty scaling: only penalize imbalance beyond mathematical minimum
     num_teams = len(dm.teams)
     num_refs = len(dm.referees)
-    teams_per_match_count = len(dm.matches[0][1].split(", ")) if dm.matches else 2
+    teams_per_match_count = 2  # Demo uses 2-team matches
     num_rounds_val = dm.rounds
     total_team_slots = num_rounds_val * num_refs * teams_per_match_count
     min_imbalance = total_team_slots % num_teams if num_teams > 0 else 0

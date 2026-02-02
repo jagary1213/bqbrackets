@@ -70,7 +70,7 @@ with st.sidebar:
             "Solver Time Limit (seconds)",
             min_value=1,
             max_value=120,
-            value=10
+            value=15
         )
         max_attempts = st.slider(
             "Max attempts (1 = no retry)",
@@ -148,8 +148,8 @@ with st.sidebar:
 # Parse inputs
 try:
     # Generate team and referee names
-    teams = [f"Team {i+1}" for i in range(num_teams)]
-    refs = [f"Ref {i+1}" for i in range(num_refs)]
+    teams = [f"T{i+1}" for i in range(num_teams)]
+    refs = [f"Ref{i+1}" for i in range(num_refs)]
 
     if not teams or len(teams) < 2:
         st.error("At least 2 teams required.")
@@ -197,10 +197,16 @@ try:
                 for t1, t2 in itertools.combinations(sorted(teams_in_match), 2):
                     key = (t1, t2) if t1 < t2 else (t2, t1)
                     pcs[key] = pcs.get(key, 0) + 1
-        if pcs:
-            vals = list(pcs.values())
-            pair_slack = max(vals) - min(vals)
-            pair_var = statistics.pvariance(vals) if len(vals) > 1 else 0.0
+        
+        # Include ALL possible pairs (even those with 0 encounters) for accurate slack calculation
+        all_pair_counts = []
+        for t1, t2 in itertools.combinations(sorted(teams), 2):
+            key = (t1, t2) if t1 < t2 else (t2, t1)
+            all_pair_counts.append(pcs.get(key, 0))
+        
+        if all_pair_counts:
+            pair_slack = max(all_pair_counts) - min(all_pair_counts)
+            pair_var = statistics.pvariance(all_pair_counts) if len(all_pair_counts) > 1 else 0.0
         else:
             pair_slack = 0
             pair_var = 0.0
@@ -436,6 +442,13 @@ try:
                         'bye_spread': 'B.Spr',
                         'best': '⭐'
                     })
+                    # Round numeric columns to 2 decimal places for mobile readability
+                    numeric_cols = ['Score', 'Pair', 'P.Var', 'Ref', 'R.Var', 'Team', 'Rmtch', 'Bye', 'B.Spr']
+                    for col in numeric_cols:
+                        if col in df_attempts_display.columns:
+                            df_attempts_display[col] = df_attempts_display[col].apply(
+                                lambda x: round(x, 2) if pd.notna(x) else x
+                            )
                     st.dataframe(df_attempts_display, use_container_width=True, hide_index=True)
 
                 if best_score <= score_threshold:
@@ -457,30 +470,50 @@ try:
         else:
             st.success("✅ Schedule generated successfully!")
 
-            # Build table of all matches
-            rows = []
-            for r in sorted(schedule.keys()):
-                for entry in schedule[r]:
+            # Build referee-round matrix
+            st.subheader("📋 Match Schedule (Referee × Round)")
+            
+            # Create matrix: rows=refs, cols=rounds
+            matrix_data = {}
+            for ref in sorted(refs):
+                matrix_data[ref] = {}
+                for round_num in range(1, num_rounds + 1):
+                    matrix_data[ref][f"Round {round_num}"] = []
+            
+            # Populate matrix with teams
+            for round_num in sorted(schedule.keys()):
+                for entry in schedule[round_num]:
                     mid, team_names, ref = entry
-                    rows.append({
-                        "Round": r,
-                        "Match ID": mid,
-                        "Teams": team_names,
-                        "Referee": ref if ref else "(unassigned)"
-                    })
-
-            df_schedule = pd.DataFrame(rows)
-            df_schedule = df_schedule[["Round", "Referee", "Teams"]]
-            df_schedule = df_schedule.sort_values(["Round", "Referee"], kind="stable").reset_index(drop=True)
-            st.subheader("📋 Match Schedule")
-
-            def _zebra(row):
-                return ["background-color: rgba(28, 131, 225, 0.1)" if row.name % 2 else "background-color: rgba(28, 131, 225, 0.05)" for _ in row]
-
+                    if ref and ref in matrix_data:
+                        teams_in_match = [s.strip() for s in team_names.split(",") if s.strip()]
+                        match_str = ", ".join(sorted(teams_in_match))
+                        matrix_data[ref][f"Round {round_num}"].append(match_str)
+            
+            # Convert to DataFrame for display (rows=rounds, cols=refs)
+            matrix_display = {}
+            for round_num in range(1, num_rounds + 1):
+                round_label = f"Round {round_num}"
+                matrix_display[round_label] = {}
+                for ref in sorted(refs):
+                    matches = matrix_data[ref][round_label]
+                    if matches:
+                        matrix_display[round_label][ref] = " | ".join(matches)
+                    else:
+                        matrix_display[round_label][ref] = "—"
+            
+            df_matrix = pd.DataFrame(matrix_display).T
+            
+            # Apply zebra striping for readability using actual index values
+            def apply_zebra(styler):
+                for i, idx in enumerate(styler.index):
+                    if i % 2 == 1:
+                        styler.set_properties(subset=pd.IndexSlice[idx, :], **{'background-color': 'rgba(0, 0, 0, 0.05)'})
+                return styler
+            
             st.dataframe(
-                df_schedule.style.apply(_zebra, axis=1),
+                apply_zebra(df_matrix.style),
                 use_container_width=True,
-                hide_index=True
+                height=200 + (num_rounds * 35)
             )
 
             # Referee balance table
@@ -493,8 +526,20 @@ try:
                 balance_rows.append(row)
 
             df_balance = pd.DataFrame(balance_rows)
+            
+            # Calculate expected referee assignments per team
+            total_assignments = sum(counts.values())
+            expected_ref_assignments = total_assignments / (len(teams) * len(refs)) if len(teams) * len(refs) > 0 else 0
+            
+            # Apply diverging colormap centered on expected value
+            ref_cols = [col for col in df_balance.columns if col != "Team"]
+            max_deviation = max(abs(df_balance[ref_cols].min().min() - expected_ref_assignments),
+                               abs(df_balance[ref_cols].max().max() - expected_ref_assignments))
+            vmin = expected_ref_assignments - max_deviation
+            vmax = expected_ref_assignments + max_deviation
+            
             st.dataframe(
-                df_balance.style.background_gradient(cmap="Blues"),
+                df_balance.style.background_gradient(cmap="RdYlGn_r", subset=ref_cols, axis=None, vmin=vmin, vmax=vmax).format(precision=0, subset=ref_cols),
                 use_container_width=True,
                 hide_index=True
             )
@@ -515,12 +560,36 @@ try:
                         key = (t1, t2) if t1 < t2 else (t2, t1)
                         pair_counts[key] = pair_counts.get(key, 0) + 1
             
+            # Create lower-triangle pair matrix
+            import numpy as np
             pair_matrix = pd.DataFrame(0, index=teams, columns=teams)
             for (t1, t2), count in pair_counts.items():
                 pair_matrix.loc[t1, t2] = count
                 pair_matrix.loc[t2, t1] = count
+            
+            # Calculate expected pair encounters
+            total_pair_encounters = sum(pair_counts.values())
+            num_possible_pairs = len(teams) * (len(teams) - 1) // 2
+            expected_encounters = total_pair_encounters / num_possible_pairs if num_possible_pairs > 0 else 0
+            
+            # Mask upper triangle and diagonal to show only lower triangle
+            mask = np.triu(np.ones(pair_matrix.shape), k=0).astype(bool)
+            pair_matrix_lower = pair_matrix.astype(float).mask(mask, np.nan)
+            
+            # Style with diverging colormap centered on expected value
+            def style_triangle(styler):
+                # Calculate max deviation from expected for symmetric color scale
+                max_deviation = max(abs(pair_matrix_lower.min().min() - expected_encounters), 
+                                   abs(pair_matrix_lower.max().max() - expected_encounters))
+                vmin = expected_encounters - max_deviation
+                vmax = expected_encounters + max_deviation
+                
+                styler.background_gradient(cmap="RdYlGn_r", axis=None, vmin=vmin, vmax=vmax)
+                styler.format(precision=0, na_rep="")
+                return styler
+            
             st.dataframe(
-                pair_matrix.style.background_gradient(cmap="Blues"),
+                style_triangle(pair_matrix_lower.style),
                 use_container_width=True
             )
 
@@ -542,8 +611,16 @@ try:
             # Team match heatmap
             st.subheader("🔥 Team Match Heatmap")
             df_team_heatmap = pd.DataFrame([team_match_counts], index=["Matches"])
+            
+            # Calculate expected matches per team
+            expected_matches = sum(team_match_counts.values()) / len(teams) if len(teams) > 0 else 0
+            max_deviation = max(abs(min(team_match_counts.values()) - expected_matches),
+                               abs(max(team_match_counts.values()) - expected_matches))
+            vmin = expected_matches - max_deviation
+            vmax = expected_matches + max_deviation
+            
             st.dataframe(
-                df_team_heatmap.style.background_gradient(cmap="Blues", axis=1),
+                df_team_heatmap.style.background_gradient(cmap="RdYlGn_r", axis=None, vmin=vmin, vmax=vmax).format(precision=0),
                 use_container_width=True
             )
             
@@ -577,16 +654,29 @@ try:
                 team_bye_counts[team] = bye_count
             
             df_byes = pd.DataFrame(bye_matrix).T
+            
+            # Calculate expected bye rate (proportion of teams with byes each round)
+            # For binary matrix (0 or 1), center on 0.5 for diverging colormap
+            expected_bye = 0.5
+            
             st.dataframe(
-                df_byes.style.background_gradient(cmap="Blues", axis=1, vmin=0, vmax=1),
+                df_byes.style.background_gradient(cmap="RdYlGn_r", axis=None, vmin=0, vmax=1).format(precision=0),
                 use_container_width=True
             )
             
             # Team bye totals heatmap
             st.subheader("📊 Total Byes per Team")
             df_bye_totals = pd.DataFrame([team_bye_counts], index=["Bye Count"])
+            
+            # Calculate expected byes per team
+            expected_byes = sum(team_bye_counts.values()) / len(teams) if len(teams) > 0 else 0
+            max_deviation = max(abs(min(team_bye_counts.values()) - expected_byes),
+                               abs(max(team_bye_counts.values()) - expected_byes))
+            vmin = expected_byes - max_deviation
+            vmax = expected_byes + max_deviation
+            
             st.dataframe(
-                df_bye_totals.style.background_gradient(cmap="Blues", axis=1),
+                df_bye_totals.style.background_gradient(cmap="RdYlGn_r", axis=None, vmin=vmin, vmax=vmax).format(precision=0),
                 use_container_width=True
             )
             
@@ -604,6 +694,21 @@ try:
             st.write(f"  • Bye distribution: {score_bye_spread:.2f} × {bye_spread_weight} = {score_bye_spread * bye_spread_weight:.2f}")
 
             # Download CSV
+            # Build df_schedule for CSV export
+            rows = []
+            for r in sorted(schedule.keys()):
+                for entry in schedule[r]:
+                    mid, team_names, ref = entry
+                    teams_in_match = [s.strip() for s in team_names.split(",") if s.strip()]
+                    rows.append({
+                        "Round": r,
+                        "Referee": ref if ref else "(unassigned)",
+                        "Teams": ", ".join(sorted(teams_in_match))
+                    })
+            
+            df_schedule = pd.DataFrame(rows)
+
+
             csv_schedule = df_schedule.to_csv(index=False)
             csv_balance = df_balance.to_csv(index=False)
             csv_pairs = pair_matrix.to_csv()

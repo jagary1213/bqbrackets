@@ -2,6 +2,7 @@ from src.datamodel import DataModel
 from src.scheduler import build_round_robin_model, solve_and_extract
 import pandas as pd
 import statistics
+import itertools
 
 dm = DataModel()
 # 14 teams
@@ -106,11 +107,17 @@ else:
     print("="*60)
     
     # 1. Pair balance (extremes) and consistency
-    pair_vals = list(pair_encounters.values())
-    if pair_vals:
-        pair_slack = max_enc - min_enc
-        pair_mean = avg_enc
-        pair_var = sum((x - pair_mean) ** 2 for x in pair_vals) / len(pair_vals)
+    # Include ALL possible pairs (even 0-count) for accurate slack calculation
+    team_list = [t.name for t in dm.teams]
+    all_pair_counts = []
+    for t1, t2 in itertools.combinations(sorted(team_list), 2):
+        key = tuple(sorted([t1, t2]))
+        all_pair_counts.append(pair_encounters.get(key, 0))
+    
+    if all_pair_counts:
+        pair_slack = max(all_pair_counts) - min(all_pair_counts)
+        pair_mean = sum(all_pair_counts) / len(all_pair_counts)
+        pair_var = sum((x - pair_mean) ** 2 for x in all_pair_counts) / len(all_pair_counts)
     else:
         pair_slack, pair_var = 0, 0.0
     
@@ -123,11 +130,18 @@ else:
                 key = (team_name, ref)
                 ref_counts[key] = ref_counts.get(key, 0) + 1
     
-    ref_vals = list(ref_counts.values()) if ref_counts else []
-    if ref_vals:
-        ref_slack = max(ref_vals) - min(ref_vals)
-        ref_mean = sum(ref_vals) / len(ref_vals)
-        ref_var = sum((x - ref_mean) ** 2 for x in ref_vals) / len(ref_vals)
+    # Include ALL possible (team, ref) combinations
+    team_list = [t.name for t in dm.teams]
+    refs_list = sorted(set(ref for (_, ref) in ref_counts.keys()))
+    all_ref_counts = []
+    for team in team_list:
+        for ref in refs_list:
+            all_ref_counts.append(ref_counts.get((team, ref), 0))
+    
+    if all_ref_counts:
+        ref_slack = max(all_ref_counts) - min(all_ref_counts)
+        ref_mean = sum(all_ref_counts) / len(all_ref_counts)
+        ref_var = sum((x - ref_mean) ** 2 for x in all_ref_counts) / len(all_ref_counts)
     else:
         ref_slack, ref_var = 0, 0.0
     
