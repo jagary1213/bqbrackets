@@ -17,7 +17,9 @@ def create_model():
 def build_round_robin_model(data_model, num_rounds: int, matches_per_round: int = None,
                             pair_slack_weight: float = 20.0, pair_var_weight: float = 5.0,
                             ref_slack_weight: float = 10.0, ref_var_weight: float = 5.0,
-                            team_match_weight: float = 300.0) -> Tuple[cp_model.CpModel, cp_model.CpSolver, Dict]:
+                            team_match_weight: float = 300.0,
+                            min_pair_encounters: int = None, max_pair_encounters: int = None,
+                            max_match_variance: int = 0) -> Tuple[cp_model.CpModel, cp_model.CpSolver, Dict]:
     """Build a round-robin scheduling model.
 
     Variables:
@@ -57,6 +59,12 @@ def build_round_robin_model(data_model, num_rounds: int, matches_per_round: int 
                     for r in rounds
                     if any(ta.id == t1.id for ta in m.teams) and any(tb.id == t2.id for tb in m.teams)
                 ))
+                
+                # Hard constraints for pair encounters (min/max bounds)
+                if min_pair_encounters is not None:
+                    model.Add(pair_encounters[(t1.id, t2.id)] >= min_pair_encounters)
+                if max_pair_encounters is not None:
+                    model.Add(pair_encounters[(t1.id, t2.id)] <= max_pair_encounters)
 
     # Team cannot play two matches in same round (byes allowed)
     for team in data_model.teams:
@@ -173,6 +181,9 @@ def build_round_robin_model(data_model, num_rounds: int, matches_per_round: int 
         model.Add(min_team_matches <= count_var)
     team_match_slack = model.NewIntVar(0, len(rounds), "team_match_slack")
     model.Add(team_match_slack == max_team_matches - min_team_matches)
+    
+    # Hard constraint: enforce max match variance between teams
+    model.Add(team_match_slack <= max_match_variance)
     
     # Combine objectives using provided weights: maximize scheduling, then balance using weights
     # Strongly prioritize: get matches_per_round matches per round

@@ -6,39 +6,117 @@ import random
 from src.datamodel import DataModel
 from src.scheduler import build_round_robin_model, solve_and_extract
 
-st.set_page_config(page_title="Tournament Scheduler", layout="wide")
-st.title("🏆 Tournament Scheduler")
-st.markdown("Generate fair tournament schedules with referee balance.")
+# Custom CSS for green checkbox
+st.markdown("""
+    <style>
+    /* Style for checked checkbox */
+    .stCheckbox > label > div[data-testid="stMarkdownContainer"] > p {
+        color: inherit;
+    }
+    /* When checkbox is checked, make the entire row green */
+    input[type="checkbox"]:checked + div {
+        color: #00cc00 !important;
+    }
+    input[type="checkbox"]:checked ~ div {
+        color: #00cc00 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# Sidebar inputs
-with st.sidebar:
-    st.header("Tournament Setup")
-    num_teams = st.number_input(
-        "Number of Teams",
+def get_num_teams():
+    """Get number of teams input"""
+    return st.number_input(
+        "👥 Number of Teams",
         min_value=2,
         max_value=100,
-        value=12
+        value=12,
+        help="Total number of teams participating in the tournament"
     )
-    teams_per_match = st.number_input(
-        "Teams per match",
+
+def get_teams_per_match():
+    """Get teams per match input"""
+    return st.number_input(
+        "🤝 Teams per match",
         min_value=2,
         max_value=10,
-        value=3
+        value=3,
+        help="How many teams compete simultaneously in each match"
     )
-    num_refs = st.number_input(
-        "Number of Referees",
+
+def get_num_referees():
+    """Get number of referees input"""
+    return st.number_input(
+        "🔔 Number of Referees",
         min_value=1,
         max_value=50,
-        value=4
+        value=4,
+        help="Number of available referees (determines how many concurrent matches possible)"
     )
-    num_rounds = st.number_input(
-        "Number of Rounds",
-        min_value=1,
-        max_value=20,
-        value=8
+
+def get_pair_encounter_inputs():
+    """Get pair encounter constraint inputs"""
+    enforce_pair_limits = st.sidebar.checkbox(
+        "⚖️ Pair encounters",
+        value=False,
+        help="Guarantees each pair meets between min and max times. Set min=max for exact encounters. Solver will fail if impossible."
     )
     
-    # Calculate and display suggestions
+    min_pair_encounters = None
+    max_pair_encounters = None
+    if enforce_pair_limits:
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            min_pair_encounters = st.number_input("Min encounters", min_value=0, max_value=20, value=1)
+        with col2:
+            max_pair_encounters = st.number_input("Max encounters", min_value=0, max_value=20, value=2)
+        
+        if min_pair_encounters > max_pair_encounters:
+            st.sidebar.error("Min must be ≤ Max")
+    
+    return enforce_pair_limits, min_pair_encounters, max_pair_encounters
+
+def get_num_rounds():
+    """Get number of rounds input"""
+    return st.number_input(
+        "🔄 Number of Rounds",
+        min_value=1,
+        max_value=20,
+        value=8,
+        help="Total number of rounds in the tournament"
+    )
+
+def show_pair_validation(enforce_pair_limits, min_pair_encounters, max_pair_encounters, 
+                        num_teams, teams_per_match, num_refs, num_rounds):
+    """Show validation for pair encounter constraints"""
+    if enforce_pair_limits and min_pair_encounters is not None and max_pair_encounters is not None:
+        # Show validation when min=max (exact constraint)
+        if min_pair_encounters == max_pair_encounters and min_pair_encounters > 0:
+            total_pairs = num_teams * (num_teams - 1) // 2
+            pairs_per_match = teams_per_match * (teams_per_match - 1) // 2
+            encounters_per_round = num_refs * pairs_per_match
+            
+            required_rounds = (total_pairs * min_pair_encounters) / encounters_per_round if encounters_per_round > 0 else 0
+            suggested_rounds_exact = round(required_rounds)
+            
+            # Check if exact is mathematically possible (required_rounds must be close to a whole number)
+            is_feasible = abs(required_rounds - suggested_rounds_exact) < 0.01
+            
+            if is_feasible and suggested_rounds_exact == num_rounds:
+                st.sidebar.success(f"✅ Perfect! {num_rounds} rounds will give exactly {min_pair_encounters} encounters per pair.")
+            elif is_feasible and suggested_rounds_exact != num_rounds:
+                st.sidebar.info(f"💡 For exactly {min_pair_encounters} encounters per pair, use {suggested_rounds_exact} rounds (you have {num_rounds}).")
+            else:
+                # Not feasible - required_rounds is not a whole number
+                st.sidebar.warning(
+                    f"⚠️ Exact constraint is **mathematically impossible** with your configuration.\n\n"
+                    f"You need {required_rounds:.2f} rounds for exactly {min_pair_encounters} encounters per pair.\n\n"
+                    f"**Options:**\n"
+                    f"• Use min={min_pair_encounters-1 if min_pair_encounters > 1 else 1}, max={min_pair_encounters+1} for flexible range\n"
+                    f"• Adjust teams, referees, or teams-per-match to make exact feasible"
+                )
+
+def show_suggestions(num_teams, teams_per_match, num_refs, num_rounds):
+    """Calculate and display suggestions"""
     suggested_refs = max(1, num_teams // teams_per_match)
     
     # Calculate matches per team with current settings
@@ -63,7 +141,9 @@ with st.sidebar:
         f"• {matches_per_team:.1f} matches per team\n"
         f"• {teams_with_bye_per_round} teams with bye per round"
     )
-    
+
+def get_advanced_settings():
+    """Get advanced settings from expander"""
     with st.sidebar.expander("⚙️ Advanced Settings", expanded=False):
         st.markdown("**Solver Configuration**")
         time_limit = st.slider(
@@ -85,6 +165,15 @@ with st.sidebar:
             max_value=100.0,
             value=50.0,
             help="The scheduler will stop retrying once it achieves a score below this threshold. Lower value means better overall balance. Typical excellent: 20-40. Good: 40-60."
+        )
+        
+        st.markdown("**Hard Constraints**")
+        max_match_variance = st.slider(
+            "Max match count variance per team",
+            min_value=0,
+            max_value=3,
+            value=0,
+            help="Maximum difference in match counts between teams. 0 = all teams must play exactly equal matches (some teams may get more byes). 1+ = teams can differ by this many matches (distributes byes more evenly)."
         )
         
         st.markdown("**Scoring weights** (higher = more important)")
@@ -144,6 +233,99 @@ with st.sidebar:
             value=3.0,
             help="Prevents teams from having clustered bye rounds. Better: byes in rounds 1, 4, 7. Worse: byes in rounds 1, 2, 3. Ensures rest opportunities are spread across the tournament."
         )
+        
+        return (time_limit, max_attempts, score_threshold, max_match_variance, pair_slack_weight, pair_var_weight,
+                ref_slack_weight, ref_var_weight, team_match_weight, rematch_delay_weight,
+                bye_balance_weight, bye_spread_weight)
+
+st.set_page_config(page_title="Tournament Scheduler", layout="wide")
+st.title("🏆 Tournament Scheduler")
+st.markdown("Generate fair tournament schedules with referee balance.")
+
+# Sidebar inputs - call functions in order
+with st.sidebar:
+    st.header("Tournament Setup")
+    
+    # 1. Number of Teams
+    num_teams = get_num_teams()
+    
+    # 2. Teams per match
+    teams_per_match = get_teams_per_match()
+    
+    # 3. Number of Referees
+    num_refs = get_num_referees()
+    
+    # 4. Pair Encounter Inputs
+    enforce_pair_limits, min_pair_encounters, max_pair_encounters = get_pair_encounter_inputs()
+    
+    # 5. Number of Rounds
+    num_rounds = get_num_rounds()
+    
+    # 6. Validation box (after number of rounds)
+    show_pair_validation(enforce_pair_limits, min_pair_encounters, max_pair_encounters,
+                        num_teams, teams_per_match, num_refs, num_rounds)
+    
+    # 7. Suggestions box
+    show_suggestions(num_teams, teams_per_match, num_refs, num_rounds)
+    
+    # 8. Advanced Settings
+    (time_limit, max_attempts, score_threshold, max_match_variance, pair_slack_weight, pair_var_weight,
+     ref_slack_weight, ref_var_weight, team_match_weight, rematch_delay_weight,
+     bye_balance_weight, bye_spread_weight) = get_advanced_settings()
+    
+    # 9. Help & Documentation
+    with st.sidebar.expander("📚 Help & Documentation", expanded=False):
+        st.markdown("""
+        ### About This Tool
+        
+        This tournament scheduler uses **Google OR-Tools**, a powerful constraint programming solver, to generate optimal tournament schedules. 
+        The solver works by defining variables (match assignments, referee assignments) and applying both **hard constraints** (rules that must be satisfied) 
+        and **soft constraints** (preferences to optimize) to find the best possible schedule.
+        
+        The tool makes multiple attempts with different random starting configurations (controlled by "Max attempts") to explore the solution space. 
+        It evaluates each schedule using a scoring function and presents the best one found. The process continues until either an excellent 
+        score is achieved (below the "Acceptable score" threshold) or the maximum number of attempts is reached.
+        
+        ---
+        
+        ### Hard Constraints
+        
+        These are **mandatory rules** that the solver must satisfy. The schedule will fail if these cannot be met:
+        
+        - **One match per team per round**: Teams cannot play in multiple matches simultaneously
+        - **One referee per match**: Each match must have exactly one referee assigned
+        - **One match per referee per round**: Referees can only officiate one match at a time
+        - **Max matches per round**: Limited by the number of available referees
+        - **Pair encounter limits** (optional): When enabled, enforces min/max times each pair of teams can meet
+        - **Match count variance** (optional): Limits how much match counts can differ between teams (0 = perfectly equal)
+        
+        ---
+        
+        ### Soft Constraints (Scoring Weights)
+        
+        These are **preferences** that the solver tries to optimize within the bounds of hard constraints. The weights are **relative to each other** 
+        and determine trade-offs when multiple objectives conflict:
+        
+        - **Higher weight** = More important, solver prioritizes this factor more heavily in the final score
+        - **Lower weight** = Less important, solver may sacrifice this to improve higher-weighted factors
+        - **Weight of 0** = Ignore this factor completely
+        
+        For example, if "Team match fairness" has weight 300 and "Rematch spacing" has weight 1, the solver considers equal match distribution 
+        300× more important than spreading out rematches. When these objectives conflict, the solver will prioritize equal matches over rematch spacing.
+        
+        **Available soft constraints:**
+        
+        - **Pair encounter balance**: Prevents extreme imbalances in how often pairs meet (e.g., one pair plays 5 times while another plays once)
+        - **Pair consistency**: Makes all pair encounter counts similar to the average
+        - **Referee balance**: Prevents teams from seeing one referee dramatically more than others
+        - **Referee consistency**: Ensures each team sees each referee a similar number of times
+        - **Team match fairness**: Ensures all teams play roughly equal matches (most critical for fairness)
+        - **Rematch spacing**: When pairs meet multiple times, spreads encounters across rounds
+        - **Bye fairness**: Distributes bye rounds (rest opportunities) evenly across teams
+        - **Bye distribution**: Prevents teams from having clustered bye rounds (spreads them out)
+        
+        The solver combines all weighted factors into a single score, then searches for the schedule with the lowest score (best balance of all preferences).
+        """)
 
 # Parse inputs
 try:
@@ -362,7 +544,10 @@ try:
                     pair_var_weight=pair_var_weight,
                     ref_slack_weight=ref_slack_weight,
                     ref_var_weight=ref_var_weight,
-                    team_match_weight=team_match_weight
+                    team_match_weight=team_match_weight,
+                    min_pair_encounters=min_pair_encounters,
+                    max_pair_encounters=max_pair_encounters,
+                    max_match_variance=max_match_variance
                 )
                 schedule, counts = solve_and_extract(model, solver, vars, dm, num_rounds, time_limit_seconds=time_limit)
 
