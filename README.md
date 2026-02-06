@@ -19,6 +19,7 @@ BQBrackets is an intelligent tournament scheduling tool that uses **constraint p
 
 - 🎯 **Interactive Web UI** - Streamlit-based interface for real-time schedule generation
 - ⚙️ **Configurable Weights** - Adjust the importance of each fairness factor with sliders
+- 🧩 **Reduced Matches (Optional)** - Allow a limited number of reduced-size matches per round to minimize rounds while preserving balance
 - 🔄 **Multi-Attempt Solver** - Runs multiple optimization passes to find the best solution
 - 📊 **Visual Heatmaps** - Referee balance, pair encounters, team match counts, and bye patterns
 - 📥 **CSV Export** - Download schedules for use in other tools
@@ -82,15 +83,23 @@ python3 score_bracket.py --file schedule.csv \
 
 **Score Calculation**: Each schedule receives a composite score (lower is better). The final score is the weighted sum of all 8 fairness factors. Typical excellent scores range from 20-40, good scores from 40-60.
 
+**Idle Referees**: The solver prefers using all available referees, but can leave some idle when needed to satisfy fairness goals or accommodate reduced-size matches.
+
+**Reduced Matches**: You can allow a limited number of reduced-size matches per round (one fewer team than a full match). The solver prefers full matches but can use reduced matches to reduce total rounds while keeping balance.
+
 **Intelligent Penalty Scaling**: For scenarios where perfect balance is mathematically impossible (e.g., 14 teams with 3-per-match), the system calculates the minimum unavoidable imbalance and only penalizes differences beyond that threshold.
 
 ## Input Parameters
 
 - **Number of Teams**: 2-100
 - **Teams per Match**: 2-10
+- **Reduced Matches per Round**: 0+ (optional reduced-size matches per round)
 - **Number of Referees**: 1-50
 - **Number of Rounds**: 1-20
+- **Max Match Variance**: Maximum allowed difference in match counts between teams (0 = perfectly equal)
 - **Scoring Weights**: Configure importance of each fairness factor (0-500 scale)
+- **Reduced Match Penalty**: How strongly full matches are preferred over reduced-size matches
+- **Reduced Match Balance**: Encourages reduced-size matches to be evenly distributed across teams
 - **Solver Time Limit**: 1-120 seconds per attempt
 - **Max Attempts**: 1-50 scheduling attempts (higher = better quality, slower)
 - **Score Threshold**: Stop when a schedule scores below this value (optimization early-stopping)
@@ -103,6 +112,7 @@ The app generates:
 - Pair encounter matrix (how many times each pair played)
 - Team match counts (participation fairness)
 - Team bye patterns (rest round distribution)
+- Reduced match participation (how often each team played in reduced-size matches)
 - Detailed score breakdown of all 8 factors
 
 ## Project Structure

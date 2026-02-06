@@ -60,6 +60,31 @@ class DataModel:
             self.matches.append(Match(id=mid, teams=list(combo)))
             mid += 1
 
+    def generate_mixed_team_matches(self, full_match_size: int, reduced_match_size: Optional[int] = None) -> None:
+        """Generate combinations for full matches and optional reduced matches.
+
+        full_match_size: standard teams-per-match size.
+        reduced_match_size: optional smaller size (typically full_match_size - 1).
+        """
+        if full_match_size < 2:
+            raise ValueError("full_match_size must be >= 2")
+        if reduced_match_size is not None and reduced_match_size < 2:
+            raise ValueError("reduced_match_size must be >= 2")
+        if reduced_match_size is not None and reduced_match_size >= full_match_size:
+            raise ValueError("reduced_match_size must be smaller than full_match_size")
+
+        self.matches.clear()
+        mid = 1
+
+        for combo in itertools.combinations(self.teams, full_match_size):
+            self.matches.append(Match(id=mid, teams=list(combo)))
+            mid += 1
+
+        if reduced_match_size is not None:
+            for combo in itertools.combinations(self.teams, reduced_match_size):
+                self.matches.append(Match(id=mid, teams=list(combo)))
+                mid += 1
+
     def generate_round_robin_matches(self, teams_per_match: int, matches_per_round: int) -> None:
         """Generate balanced round-robin matches using a rotation schedule.
 
