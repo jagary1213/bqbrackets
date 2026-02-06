@@ -158,11 +158,13 @@ def render_heatmaps(schedule_dict, counts_global, title_prefix, *, teams, refs, 
     if reduced_match_size is not None and reduced_match_size >= 2:
         st.subheader(f"🧩 {title_prefix} Reduced Match Participation")
         reduced_match_counts = {team: 0 for team in teams}
+        reduced_per_round = {round_num: 0 for round_num in range(1, num_rounds + 1)}
         for round_num in sorted(schedule_dict.keys()):
             for entry in schedule_dict[round_num]:
                 _, team_names, _ = entry
                 teams_in_match = [s.strip() for s in team_names.split(",") if s.strip()]
                 if len(teams_in_match) == reduced_match_size:
+                    reduced_per_round[round_num] += 1
                     for t in teams_in_match:
                         if t in reduced_match_counts:
                             reduced_match_counts[t] += 1
@@ -178,6 +180,18 @@ def render_heatmaps(schedule_dict, counts_global, title_prefix, *, teams, refs, 
 
         st.dataframe(
             df_reduced.style.background_gradient(cmap="RdYlGn_r", axis=None, vmin=vmin, vmax=vmax).format(precision=0),
+            use_container_width=True,
+        )
+
+        st.subheader(f"🧩 {title_prefix} Reduced Matches per Round")
+        df_reduced_rounds = pd.DataFrame(
+            [{f"Round {r}": reduced_per_round.get(r, 0) for r in range(1, num_rounds + 1)}],
+            index=["Reduced Matches"],
+        )
+        max_reduced = max(reduced_per_round.values()) if reduced_per_round else 0
+        st.dataframe(
+            df_reduced_rounds.style.background_gradient(cmap="RdYlGn_r", axis=None, vmin=0, vmax=max_reduced)
+            .format(precision=0),
             use_container_width=True,
         )
 
