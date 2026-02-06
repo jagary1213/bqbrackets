@@ -36,6 +36,7 @@ def render_schedule_matrix(schedule_dict, title_prefix, *, refs, num_rounds):
                 matrix_display[round_label][ref] = "—"
 
     df_matrix_local = pd.DataFrame(matrix_display).T
+    df_matrix_local.index.name = "Round"
 
     def apply_zebra(styler):
         for i, idx in enumerate(styler.index):

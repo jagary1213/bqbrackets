@@ -364,8 +364,8 @@ def get_advanced_settings() -> Tuple[bool, Optional[int], int, float, int, float
         reduced_match_balance_weight = st.slider(
             "Reduced match balance (equal distribution)",
             min_value=0.0,
-            max_value=100.0,
-            value=50.0,
+            max_value=200.0,
+            value=100.0,
             help="Encourages reduced-size matches to be spread evenly across teams. Higher values make distribution more uniform."
         )
 
